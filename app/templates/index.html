@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+    <title>
+        Agentic AI Text-to-SQL
+    </title>
+
+    <style>
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 80px;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 15px;
+            overflow-x: auto;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        #loading {
+            display: none;
+            margin-top: 20px;
+        }
+
+        #error {
+            margin-top: 20px;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+<h1>
+    Agentic AI Text-to-SQL
+</h1>
+
+<p>
+    Ask a question about the Chinook database.
+</p>
+
+
+<textarea
+    id="question"
+    placeholder="Example: Show the top 5 artists by number of tracks">
+</textarea>
+
+<br>
+
+<button onclick="submitQuestion()">
+    Generate SQL
+</button>
+
+
+<div id="loading">
+    Generating SQL and executing query...
+</div>
+
+
+<div id="error"></div>
+
+
+<div id="response" style="display:none;">
+
+    <h2>
+        Generated SQL
+    </h2>
+
+    <pre id="sql"></pre>
+
+
+    <h2>
+        Explanation
+    </h2>
+
+    <div id="explanation"></div>
+
+    <h2>Semantic Retrieval</h2>
+
+    <div id="semanticTrace"></div>
+
+
+    <h2>Agent Workflow</h2>
+
+    <div id="agentTrace"></div>
+
+
+    <h2>
+        Results
+    </h2>
+
+    <div id="results"></div>
+
+</div>
+
+
+<script>
+
+async function submitQuestion() {
+
+    const question =
+        document.getElementById(
+            "question"
+        ).value.trim();
+
+
+    if (!question) {
+
+        alert(
+            "Please enter a question."
+        );
+
+        return;
+    }
+
+
+    document.getElementById(
+        "loading"
+    ).style.display = "block";
+
+
+    document.getElementById(
+        "response"
+    ).style.display = "none";
+
+
+    document.getElementById(
+        "error"
+    ).innerHTML = "";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/query",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify(
+                        {
+                            question: question
+                        }
+                    )
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.detail
+                || "Request failed"
+            );
+        }
+
+
+        document.getElementById(
+            "sql"
+        ).textContent =
+            data.generated_sql;
+
+
+        document.getElementById(
+            "explanation"
+        ).textContent =
+            data.explanation;
+
+        // Render FalkorDB semantic retrieval details
+        renderSemanticTrace(data);
+
+        renderAgentTrace(data);
+
+
+        renderTable(
+            data.columns,
+            data.rows
+        );
+
+
+        document.getElementById(
+            "response"
+        ).style.display =
+            "block";
+
+    }
+
+    catch (error) {
+
+        document.getElementById(
+            "error"
+        ).textContent =
+            "Error: " + error.message;
+    }
+
+    finally {
+
+        document.getElementById(
+            "loading"
+        ).style.display =
+            "none";
+    }
+}
+
+
+function renderTable(
+    columns,
+    rows
+) {
+
+    const resultsDiv =
+        document.getElementById(
+            "results"
+        );
+
+
+    if (!rows.length) {
+
+        resultsDiv.innerHTML =
+            "<p>No rows returned.</p>";
+
+        return;
+    }
+
+
+    let html = "<table>";
+
+
+    html += "<thead><tr>";
+
+    columns.forEach(
+        column => {
+
+            html +=
+                "<th>"
+                + column
+                + "</th>";
+        }
+    );
+
+    html += "</tr></thead>";
+
+
+    html += "<tbody>";
+
+
+    rows.forEach(
+        row => {
+
+            html += "<tr>";
+
+            columns.forEach(
+                column => {
+
+                    let value =
+                        row[column];
+
+                    if (
+                        value === null
+                        || value === undefined
+                    ) {
+                        value = "";
+                    }
+
+                    html +=
+                        "<td>"
+                        + escapeHtml(value)
+                        + "</td>";
+                }
+            );
+
+            html += "</tr>";
+        }
+    );
+
+
+    html += "</tbody></table>";
+
+
+    resultsDiv.innerHTML =
+        html;
+}
+
+
+function escapeHtml(value) {
+
+    const div =
+        document.createElement("div");
+
+    div.textContent =
+        String(value);
+
+    return div.innerHTML;
+}
+
+function renderSemanticTrace(data) {
+
+    const retrievalMode =
+        data.retrieval_mode || "unknown";
+
+    const concepts =
+        data.concepts || [];
+
+    const metrics =
+        data.metrics || [];
+
+    const tables =
+        data.tables || [];
+
+    const joinPaths =
+        data.join_paths || [];
+
+
+    let html = "";
+
+    // -----------------------------
+    // Retrieval mode
+    // -----------------------------
+
+    html += "<h3>Retrieval Mode</h3>";
+
+    html +=
+        "<p>" +
+        escapeHtml(retrievalMode) +
+        "</p>";
+
+
+    // -----------------------------
+    // Concepts
+    // -----------------------------
+
+    html +=
+        "<h3>Detected Concepts</h3>";
+
+
+    if (concepts.length > 0) {
+
+        html += "<ul>";
+
+        concepts.forEach(
+            concept => {
+
+                html +=
+                    "<li>" +
+                    escapeHtml(
+                        concept.name
+                    ) +
+                    "</li>";
+            }
+        );
+
+        html += "</ul>";
+
+    } else {
+
+        html +=
+            "<p>No concepts detected.</p>";
+    }
+
+
+    // -----------------------------
+    // Metrics
+    // -----------------------------
+
+    html +=
+        "<h3>Detected Metrics</h3>";
+
+
+    if (metrics.length > 0) {
+
+        html += "<ul>";
+
+        metrics.forEach(
+            metric => {
+
+                html +=
+                    "<li><strong>" +
+                    escapeHtml(
+                        metric.name
+                    ) +
+                    "</strong>";
+
+                if (
+                    metric.expression
+                ) {
+
+                    html +=
+                        " = " +
+                        escapeHtml(
+                            metric.expression
+                        );
+                }
+
+                html += "</li>";
+            }
+        );
+
+        html += "</ul>";
+
+    } else {
+
+        html +=
+            "<p>No metrics detected.</p>";
+    }
+
+
+    // -----------------------------
+    // Tables
+    // -----------------------------
+
+    html +=
+        "<h3>Selected Tables</h3>";
+
+
+    if (tables.length > 0) {
+
+        html += "<ul>";
+
+        tables.forEach(
+            table => {
+
+                html +=
+                    "<li>" +
+                    escapeHtml(table) +
+                    "</li>";
+            }
+        );
+
+        html += "</ul>";
+
+    } else {
+
+        html +=
+            "<p>No tables selected.</p>";
+    }
+
+
+    // -----------------------------
+    // Join paths
+    // -----------------------------
+
+    html +=
+        "<h3>Join Paths</h3>";
+
+
+    if (joinPaths.length > 0) {
+
+        joinPaths.forEach(
+            path => {
+
+                html +=
+                    "<p>" +
+                    path
+                        .map(
+                            item =>
+                                escapeHtml(item)
+                        )
+                        .join(
+                            " → "
+                        ) +
+                    "</p>";
+            }
+        );
+
+    } else {
+
+        html +=
+            "<p>No join path required.</p>";
+    }
+
+
+    document.getElementById(
+        "semanticTrace"
+    ).innerHTML = html;
+}
+
+
+function renderAgentTrace(data) {
+
+    const trace =
+        data.trace || [];
+
+    const plan =
+        data.plan || [];
+
+
+    let html = "";
+
+
+    // ------------------------
+    // Intent
+    // ------------------------
+
+    html +=
+        "<h3>Intent</h3>";
+
+    html +=
+        "<p>" +
+        escapeHtml(
+            data.intent || ""
+        ) +
+        "</p>";
+
+
+    // ------------------------
+    // Plan
+    // ------------------------
+
+    html +=
+        "<h3>Execution Plan</h3>";
+
+    if (plan.length) {
+
+        html += "<ol>";
+
+        plan.forEach(
+            step => {
+
+                html +=
+                    "<li>" +
+                    escapeHtml(step) +
+                    "</li>";
+            }
+        );
+
+        html += "</ol>";
+    }
+
+
+    // ------------------------
+    // Trace
+    // ------------------------
+
+    html +=
+        "<h3>Agent Trace</h3>";
+
+
+    if (trace.length) {
+
+        html += "<ul>";
+
+        trace.forEach(
+            step => {
+
+                html +=
+                    "<li>✓ " +
+                    escapeHtml(step) +
+                    "</li>";
+            }
+        );
+
+        html += "</ul>";
+    }
+
+
+    // ------------------------
+    // Retry
+    // ------------------------
+
+    html +=
+        "<h3>Correction Attempts</h3>";
+
+    html +=
+        "<p>" +
+        escapeHtml(
+            data.retry_count || 0
+        ) +
+        "</p>";
+
+
+    document.getElementById(
+        "agentTrace"
+    ).innerHTML = html;
+}
+</script>
+
+
+</body>
+
+</html>
